@@ -1,8 +1,7 @@
 import model as m
 import numpy as np
 import matplotlib.pyplot as plt
-
-data_folder = 'data/track1-given'
+import prep as p
 
 
 # image display helper
@@ -17,7 +16,7 @@ def show_image(image, cmap='jet'):
 def histogram(title, numbers):
     data_range = (np.amin(numbers), np.amax(numbers))
     print("data range: {}".format(data_range))
-    plt.hist(numbers, bins=21, range=data_range)
+    plt.hist(numbers, bins=51, range=data_range)
     plt.title(title)
     plt.xlabel("Value")
     plt.ylabel("Frequency")
@@ -26,29 +25,20 @@ def histogram(title, numbers):
 
     plt.show()
 
+def review_data_folder(input_folder_name):
+    # review processed data
+    processed_folder = p.DataFolder(input_folder_name, 'processed_log.csv')
+    processed_folder.load_data_log()
+    histogram("Processed Data", processed_folder.angles)
 
-def steering_histo(title):
-    data = m.read_data_log(data_folder)
-    sum_total = sum(data[:, 3].astype(float))
-    weights = (abs(data[:, 3].astype(float)) + 0.0000001) / float(sum_total)
-    fetch_count = len(data)
-    angles = np.ndarray(fetch_count * 3)
-    for i in range(fetch_count):
-        next_start, names, angles[i * 3:i * 3 + 3] = m.fetch_random_row(data,
-                                                                        weights=weights,
-                                                                        start=-1,
-                                                                        min_dist=0.5,
-                                                                        min_prob=0.05)
-
-    # for i in range(len(angles)):
-    #     print("{}: {}".format(i, angles[i]))
-
-    histogram(title, angles)
-
+    # review balanced data
+    balanced_folder = p.DataFolder(input_folder_name, 'balanced_log.csv')
+    balanced_folder.load_data_log()
+    histogram("Balanced Data", balanced_folder.angles)
 
 def main():
-    # steering_histo("All Data")
-    steering_histo("Filtered Data")
+    review_data_folder('./data/track1-given')
+    review_data_folder('./data/bc-track-1')
 
 
 if __name__ == "__main__":
