@@ -14,8 +14,9 @@ def show_image(image, cmap='jet'):
 
 
 def histogram(title, numbers):
+    data_count = len(numbers)
     data_range = (np.amin(numbers), np.amax(numbers))
-    print("data range: {}".format(data_range))
+    print("data_count: {}, data range: {}".format(data_count, data_range))
     plt.hist(numbers, bins=51, range=data_range)
     plt.title(title)
     plt.xlabel("Value")
@@ -24,6 +25,7 @@ def histogram(title, numbers):
     # fig = plt.gcf()
 
     plt.show()
+
 
 def review_data_folder(input_folder_name):
     # review processed data
@@ -35,6 +37,7 @@ def review_data_folder(input_folder_name):
     balanced_folder = p.DataFolder(input_folder_name, 'balanced_log.csv')
     balanced_folder.load_data_log()
     histogram("Balanced Data", balanced_folder.angles)
+
 
 def main():
     review_data_folder('./data/track1-given')
