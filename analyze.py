@@ -13,11 +13,15 @@ def show_image(image, cmap='jet'):
     plt.show()
 
 
-def histogram(title, numbers):
+def histogram(title, numbers, bins=20):
+    hist, bin_edges = np.histogram(numbers, bins=bins, range=(-1.0, 1.0), density=False)
+    print("hist: {}".format(hist))
+    print("bin_edges: {}".format(bin_edges))
+
     data_count = len(numbers)
     data_range = (np.amin(numbers), np.amax(numbers))
     print("data_count: {}, data range: {}".format(data_count, data_range))
-    plt.hist(numbers, bins=51, range=data_range)
+    plt.hist(numbers, bins=bins, range=data_range)
     plt.title(title)
     plt.xlabel("Value")
     plt.ylabel("Frequency")
@@ -42,6 +46,9 @@ def review_data_folder(input_folder_name):
 def main():
     review_data_folder('./data/track1-given')
     review_data_folder('./data/bc-track-1')
+    review_data_folder('./data/recover')
+    review_data_folder('./data/first-curve')
+    review_data_folder('./data/combine2')
 
 
 if __name__ == "__main__":

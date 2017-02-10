@@ -16,6 +16,7 @@ from keras.layers.core import Dense, Dropout, Flatten, Lambda
 from keras.layers.convolutional import Convolution2D
 from keras.layers.advanced_activations import ELU
 from keras.preprocessing.image import ImageDataGenerator
+from keras.layers.pooling import MaxPooling2D
 import numpy as np
 import prep as p
 import cv2
@@ -67,23 +68,23 @@ def drive_log_generator(data_folder, batch_size=500):
 def define_model(input_shape):
     model = Sequential([
         Lambda(lambda x: x/127.5 - 1., input_shape=input_shape, output_shape=input_shape),
-        Convolution2D(12, 8, 8, activation='relu', border_mode="valid", input_shape=input_shape),
+        Convolution2D(12, 8, 8, activation='elu', border_mode="valid", input_shape=input_shape),
         # Dropout(.1),
-        Convolution2D(24, 5, 5, activation='relu', border_mode='valid', subsample=(2, 2)),
+        Convolution2D(24, 5, 5, activation='elu', border_mode='valid', subsample=(2, 2)),
         # Dropout(.2),
-        Convolution2D(36, 5, 5, activation='relu', border_mode='valid', subsample=(2, 2)),
+        Convolution2D(36, 5, 5, activation='elu', border_mode='valid', subsample=(2, 2)),
         # Dropout(.3),
-        Convolution2D(48, 3, 3, activation='relu', border_mode='valid', subsample=(2, 2)),
+        Convolution2D(48, 3, 3, activation='elu', border_mode='valid', subsample=(2, 2)),
         # Dropout(.4),
-        # MaxPooling2D(),
+        MaxPooling2D((2, 2), strides=(2, 2)),
         Flatten(),
-        Dense(1164, activation='relu'),
+        Dense(1164, activation='elu'),
         # Dropout(.5),
-        Dense(100, activation='relu'),
+        Dense(100, activation='elu'),
         # Dropout(.5),
-        Dense(50, activation='relu'),
+        Dense(50, activation='elu'),
         # Dropout(.5),
-        Dense(10, activation='relu'),
+        Dense(10, activation='elu'),
         # Dropout(.5),
         Dense(1)
     ])
@@ -142,7 +143,10 @@ def save_model(model, name):
 
 def main():
     from time import time
-    train_data_name = 'data/track1-given'
+    train_data_name = 'data/combine2'
+    # train_data_name = 'data/combine'
+    # train_data_name = 'data/track1-given'
+    # train_data_name = 'data/bc-track-1'
     valid_data_name = 'data/bc-track-1'
 
     training_folder = p.DataFolder(train_data_name, 'balanced_log.csv')
@@ -154,29 +158,32 @@ def main():
     model.summary()
 
     generator = ImageDataGenerator(
-                samplewise_center=True,
-                samplewise_std_normalization=True,
-                width_shift_range=0.1,
-                height_shift_range=0.1,
-                # channel_shift_range=[-50, 50],
-                fill_mode="reflect",
+                # samplewise_center=True,
+                # samplewise_std_normalization=True,
+                # zca_whitening=True,
+                width_shift_range=0.05,
+                height_shift_range=0.05,
+                shear_range=1.57,
+                # rotation_range=0.1,
+                channel_shift_range=30.0,
+                fill_mode="nearest",
                 dim_ordering="tf"
             )
+
     images = training_folder.load_images(log_every_n=1000)
     angles = training_folder.angles
-
-
+    # generator.fit(images, augment=True, rounds=3)
+    # print("fitted complete")
     t0 = time()
     # history = model.fit(X_train, y_train,  batch_size=64, nb_epoch=10, validation_split=0.2)
     model.fit_generator(
         # drive_log_generator(training_folder, batch_size=2000),
-        generator.flow(images, angles,
-                       batch_size=256, shuffle=True,
-                       save_to_dir=training_folder.provide_keras_folder()),
-        samples_per_epoch=20480,
+        # save_to_dir=training_folder.provide_keras_folder()
+        generator.flow(images, angles, batch_size=256, shuffle=True),
+        samples_per_epoch=20000,
         nb_epoch=20,
-        validation_data=drive_log_generator(valid_folder),
-        nb_val_samples=2000,
+        # validation_data=drive_log_generator(valid_folder),
+        # nb_val_samples=1000,
         verbose=1)
     print("Duration: {}s".format(round(time() - t0, 3)))
 
