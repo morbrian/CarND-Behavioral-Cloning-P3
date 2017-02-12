@@ -14,61 +14,23 @@ from keras.models import Sequential
 from keras.optimizers import Adam
 from keras.layers.core import Dense, Dropout, Flatten, Lambda
 from keras.layers.convolutional import Convolution2D
+from keras.layers import Cropping2D
 from keras.layers.advanced_activations import ELU
-from keras.preprocessing.image import ImageDataGenerator
 from keras.layers.pooling import MaxPooling2D
-import numpy as np
 import prep as p
-import cv2
 
 
-def drive_log_generator(data_folder, batch_size=500):
-    # generator = ImageDataGenerator(
-    #     samplewise_center=True,
-    #     samplewise_std_normalization=True,
-    #     width_shift_range=0.1,
-    #     height_shift_range=0.1,
-    #     channel_shift_range=[-50, 50],
-    #     fill_mode="reflect",
-    #     dim_ordering="tf"
-    # )
-    # images = data_folder.load_images()
-    # while True:
-    #     yield generator.flow(images, data_folder.angles,
-    #                          batch_size=batch_size, shuffle=True,
-    #                          save_to_dir='/'.join([data_folder.base_folder, 'keras_generated']))
-
-    true_end = len(data_folder.angles)
-    assert batch_size < true_end, "Error: batch_size must be less than total number of samples"
-
-    next_start = 0
-    next_end = next_start + batch_size
-    while 1:
-        angles = data_folder.angles[next_start:next_end]
-        names = data_folder.names[next_start:next_end]
-        images = np.ndarray((len(names), p.CROP_H, p.CROP_W, p.CHANNELS))
-        for i, name in enumerate(names):
-            # images[i][:, :] = p.prepare_image(cv2.imread('/'.join([data_folder.base_folder, name])), crop=False)
-            images[i][:, :] = cv2.imread('/'.join([data_folder.base_folder, name]))
-
-        next_start = next_end if next_end >= true_end else 0
-        next_end = next_start + batch_size
-        if next_end > true_end:
-            next_end = true_end
-
-        # should the denom instead be over the entire sample set?
-        # sample_weights = (abs(angles) + 0.0001) / sum(angles)
-
-        yield images, angles  # , sample_weights
-
-
-# model started with these two references then evolved through experimentation:
-# https://devblogs.nvidia.com/parallelforall/deep-learning-self-driving-cars/
-# https://github.com/commaai/research/blob/master/train_steering_model.py
-def define_model(input_shape):
+def nvidia_model(input_shape):
+    """
+    model started with this reference and includes minor adjustments:
+    https://devblogs.nvidia.com/parallelforall/deep-learning-self-driving-cars/
+    :param input_shape: initial shape of the input data
+    :return: None
+    """
     model = Sequential([
         Lambda(lambda x: x/127.5 - 1., input_shape=input_shape, output_shape=input_shape),
-        Convolution2D(12, 8, 8, activation='elu', border_mode="valid", input_shape=input_shape),
+        Cropping2D(cropping=((65, 0), (0, 0))),
+        Convolution2D(12, 8, 8, activation='elu', border_mode="valid"),
         # Dropout(.1),
         Convolution2D(24, 5, 5, activation='elu', border_mode='valid', subsample=(2, 2)),
         # Dropout(.2),
@@ -97,10 +59,17 @@ def define_model(input_shape):
 
 
 def commaai_model(input_shape):
+    """
+    model started with this reference and includes minor adjustments:
+    https://github.com/commaai/research/blob/master/train_steering_model.py
+    :param input_shape: initial shape of the input data
+    :return: None
+    """
     model = Sequential()
     model.add(Lambda(lambda x: x/127.5 - 1.,
                      input_shape=input_shape,
                      output_shape=input_shape))
+    model.add(Cropping2D(cropping=((65, 0), (0, 0)))),
     model.add(Convolution2D(16, 8, 8, subsample=(4, 4), border_mode="same", input_shape=input_shape))
     model.add(ELU())
     model.add(Convolution2D(32, 5, 5, subsample=(2, 2), border_mode="same"))
@@ -141,54 +110,39 @@ def save_model(model, name):
     return save_dir
 
 
-def main():
+def build_and_train_model(train_data_name):
     from time import time
-    train_data_name = 'data/combine2'
-    # train_data_name = 'data/combine'
-    # train_data_name = 'data/track1-given'
-    # train_data_name = 'data/bc-track-1'
-    valid_data_name = 'data/bc-track-1'
-
-    training_folder = p.DataFolder(train_data_name, 'balanced_log.csv')
+    training_folder = p.DataFolder(train_data_name, 'pair_log.csv', raw_file='driving_log.csv',
+                                   name_cols=(0, 1, 2), angle_col=3)
     training_folder.load_data_log()
-    valid_folder = p.DataFolder(valid_data_name, 'balanced_log.csv')
-    valid_folder.load_data_log()
+    training_folder.store_data_metrics()
+    training_folder.persist_pairs()
 
-    model = define_model((p.CROP_H, p.CROP_W, p.CHANNELS))
+    # model = nvidia_model((p.HEIGHT, p.WIDTH, p.CHANNELS))
+    model = commaai_model((p.HEIGHT, p.WIDTH, p.CHANNELS))
     model.summary()
 
-    generator = ImageDataGenerator(
-                # samplewise_center=True,
-                # samplewise_std_normalization=True,
-                # zca_whitening=True,
-                width_shift_range=0.05,
-                height_shift_range=0.05,
-                shear_range=1.57,
-                # rotation_range=0.1,
-                channel_shift_range=30.0,
-                fill_mode="nearest",
-                dim_ordering="tf"
-            )
-
-    images = training_folder.load_images(log_every_n=1000)
-    angles = training_folder.angles
-    # generator.fit(images, augment=True, rounds=3)
-    # print("fitted complete")
     t0 = time()
-    # history = model.fit(X_train, y_train,  batch_size=64, nb_epoch=10, validation_split=0.2)
     model.fit_generator(
-        # drive_log_generator(training_folder, batch_size=2000),
-        # save_to_dir=training_folder.provide_keras_folder()
-        generator.flow(images, angles, batch_size=256, shuffle=True),
+        training_folder.data_generator(),
         samples_per_epoch=20000,
         nb_epoch=20,
-        # validation_data=drive_log_generator(valid_folder),
-        # nb_val_samples=1000,
         verbose=1)
     print("Duration: {}s".format(round(time() - t0, 3)))
 
     save_dir = save_model(model, '{}'.format(train_data_name))
     print('Model data saved to: {}'.format(save_dir))
+
+
+def main():
+    import optparse
+
+    parser = optparse.OptionParser()
+    parser.add_option('-d', '--data_folder', dest='data_folder', default='./data/moriarty-track1-combine',
+                      help="path to folder containing driving_log.csv and image data.")
+    options, args = parser.parse_args()
+
+    build_and_train_model(options.data_folder)
 
 
 if __name__ == "__main__":
