@@ -162,13 +162,14 @@ class DataFolder:
             metrics_file.write("bin_edges: {}\n".format(bin_edges))
 
     def data_generator(self, batch_size=256, loop_forever=True, min_filter=0.001, min_keep_prob=0.1,
-                       max_filter=1.0, max_keep_prob=1.0, bin_count=20):
+                       max_filter=1.0, max_keep_prob=1.0, bin_count=20, pick_limit=40000):
         """
         Repeated select random batches of data from the dataset.
         The pool of data can be reduced by filtering large values or values near zero
         in order to improve how the data is balanced.
         The algorithm attempts to select samples evenly distributed across the
         spectrum of angles between -1.0 and 1.0.
+        :param pick_limit: maximum selection attempts before expanding the search range when picking steering sample
         :param batch_size: number of samples yielded per batch
         :param max_keep_prob: probability of keeping large angles
         :param max_filter: angles greater than this are considered to large
@@ -181,20 +182,19 @@ class DataFolder:
             self.filter_extremes(min_filter=min_filter, min_keep_prob=min_keep_prob, max_filter=max_filter,
                                  max_keep_prob=max_keep_prob)
         hist, bin_edges = np.histogram(interim_angles, bins=bin_count, range=(-1.0, 1.0), density=False)
-        one_run = True
-        while loop_forever or one_run:
+        while loop_forever:
             images = np.ndarray(shape=(batch_size, HEIGHT, WIDTH, CHANNELS))
             angles = np.ndarray(shape=(batch_size,))
             for i in range(batch_size):
                 random_edge = random.randint(0, len(bin_edges)-2)
-                pick_i = DataFolder.pick_in_range(interim_angles, bin_edges[random_edge], bin_edges[random_edge + 1])
+                pick_i = DataFolder.pick_in_range(interim_angles, bin_edges[random_edge], bin_edges[random_edge + 1],
+                                                  pick_limit=pick_limit)
                 angles[i], images[i][:, :] = \
                     DataFolder.jitter_data(interim_angles[pick_i],
                                            ndimage.imread('/'.join([self.base_folder, interim_names[pick_i]])))
             if loop_forever:
                 yield images, angles
             else:
-                one_run = False
                 return images, angles
 
     def filter_extremes(self, min_filter=0.001, min_keep_prob=0.1,
@@ -219,7 +219,6 @@ class DataFolder:
     @staticmethod
     def jitter_data(angle, image, shift_prob=0.8, shift_height_range=0.05, shift_width_range=0.05,
                     shift_channel_prob=0.3, flip_prob=0.5):
-
         """
         Perform random maniplations on the generated images, controlled by this method's parameters.
         Both the angle and image can be modified as part of the return value.
