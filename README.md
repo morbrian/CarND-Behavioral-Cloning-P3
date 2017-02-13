@@ -327,7 +327,7 @@ anywhere in the image.
 
 [//]: # (Jitter References)
 
-[jitter-original]: ./doc/jitter-demo/sample.jpg "Original image before jittering"
+[jitter-original]: ./doc/jitter-demo/sample.png "Original image before jittering"
 [jitter-blur]: ./doc/jitter-demo/blur.png "Jitter blurred image"
 [jitter-flip]: ./doc/jitter-demo/flip.png "Jitter flipped image"
 [jitter-noise]: ./doc/jitter-demo/noise.png "Jitter gaussian noise image"
