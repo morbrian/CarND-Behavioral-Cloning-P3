@@ -1,14 +1,6 @@
 #
-# Script used to create and train the model.
-# Now that you have training data, it’s time to build and train your network!
+# Udacity P3: Behavioral Learning
 #
-# Use Keras to train a network to do the following:
-#
-# Take in an image from the center camera of the car. This is the input to your neural network.
-# Output a new steering angle for the car.
-#     You don’t have to worry about the throttle for this project, that will be set for you.
-#
-# Save your model architecture as model.json, and the weights as model.h5.
 
 from keras.models import Sequential
 from keras.optimizers import Adam
@@ -17,7 +9,6 @@ from keras.layers.convolutional import Convolution2D
 from keras.layers import Cropping2D
 from keras.layers.advanced_activations import ELU
 from keras.layers.pooling import MaxPooling2D
-from keras.layers.local import LocallyConnected2D
 import prep as p
 
 
@@ -95,6 +86,8 @@ def commaai_model(input_shape):
     """
     model started with this reference and includes minor adjustments:
     https://github.com/commaai/research/blob/master/train_steering_model.py
+    Copyright (c) 2016, comma.ai
+    All rights reserved.
     :param input_shape: initial shape of the input data
     :return: None
     """
@@ -152,9 +145,9 @@ def build_and_train_model(train_data_path, model_name):
     if model_name == 'moriarty':
         model = moriarty_model(input_shape)
     elif model_name == 'nvidia':
-        nvidia_model(input_shape)
+        model = nvidia_model(input_shape)
     elif model_name == 'commaai':
-        commaai_model(input_shape)
+        model = commaai_model(input_shape)
     else:
         print("ERROR: unknown model specified: {}", model_name)
 
@@ -164,14 +157,14 @@ def build_and_train_model(train_data_path, model_name):
 
     t0 = time()
     model.fit_generator(
-        training_folder.data_generator(min_keep_prob=0.98,
+        training_folder.data_generator(min_keep_prob=0.05,
                                        flip_prob=0.5,
                                        shift_prob=0.2,
                                        shift_channel_prob=0.8,
-                                       blur_prob=0.0,
-                                       shear_prob=0.5,
+                                       blur_prob=0.2,
+                                       shear_prob=0.2,
                                        noise_prob=0.2,
-                                       shade_prob=0.8),
+                                       shade_prob=0.0),
         samples_per_epoch=20000,
         nb_epoch=40,
         verbose=1)

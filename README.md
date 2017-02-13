@@ -13,6 +13,7 @@ The third project in the first 3 month session of the Udacity Self Driving Car s
 * [Data Preparation](#data-preparation)
 * [Training Process](#training-process)
 * [Augmentation Through Jittering](#augmentation-through-jittering)
+* [How To Run Code](#how-to-run-code)
 
 ---
 ## Introduction
@@ -20,10 +21,10 @@ The third project in the first 3 month session of the Udacity Self Driving Car s
 This project is a collection of data tools and deep learning algorithms designed to 
 assist a data scientist with developing a model for effectively predicting steering
 angles of a vehicle based on imagery provided by front facing cameras mounted on 
-the vehicle. This work was initially created based while completing the third project 
-in the first 3 month session  of the Udacity program focuses on Deep Learning  and 
+the vehicle. This work was initially created while completing the third project 
+in the first 3 month session of the Udacity program focused on Deep Learning and 
 Computer Vision. This project in particular is focused on implementing a Deep Learning 
-neural network to teach an  unmanned vehicle to stay on the road by using an approach 
+neural network to teach an  unmanned vehicle to stay on the road using an approach 
 called behavioral cloning.
 
 In [Background](#background) we discuss the project goals and research topics recommended
@@ -34,12 +35,15 @@ steering of a self-driving car based on image input. Each of the sections after
 level core areas of work for the project, [Model Development](#model-development),
 [Data Collection](#data-collection) and [Data Preparation](#data-preparation).
 
+In the final sections we discuss the capabilities provided by the program files
+and how to run them, [How To Run Code](#how-to-run-code).
+
 ---
 ## Background
 
 The term *behavioral cloning* describes a strategy by which a computer can learn to observe 
 characteristics of a particular behavior and then mimic the behavior on its own. In this
-project the observed behavior is simple instance of driving a vehicle on an empty road,
+project the observed behavior is simple instances of driving a vehicle on an empty road,
 and the method of observation is via three front facing cameras mounted on the vehicle
 to capture images of the road and landscape ahead along with the steering angle of 
 the vehicle at the moment the images was captured.
@@ -57,7 +61,7 @@ of the road.
 ## Approach
 
 It felt easy to get started on this project. Keras makes it simple to layer together an
-arbitrary model and the simulator seemed to make data collection simple. But our early
+arbitrary network model and the simulator seemed to make data collection simple. But our early
 optimism slowly faded after a series of failed experiments, only to return again once
 we learned to secrets to the problem.
 
@@ -74,7 +78,7 @@ Our first attempts at data collection had relied exclusively on the keyboard whi
 steering angles, and significantly more straight steering angles than appropriate for the track.
 
 We were able to acquire two alternative datasets, one provided by [Udacity][udacity] and another provided 
-by a student on the course Slack channel. Together, these provided nearly 130,000 images which
+by a student on the course Slack channel. Together, these provided nearly 130,000 images with
 a wide variety of steering angles more appropriate for the track than what we could manually generate.
 
 Training on this new data helped the vehicle drive straight into the lake.
@@ -121,8 +125,8 @@ added some layers of our own to experiment. We use a lambda layer to perform ini
 and then apply cropping to focus more on the road than the horizon.
 
 The [NVidia paper][nvidia-model] did not state what they used for activation. We decided to specify `elu`
-activation as part of each convolution layer, inspired by seeing the [Commaai model][commaai-model] use
-`elu` in their approach. `Elu` is described as being more useful for regression problems like the
+activation as part of each convolution layer, inspired by seeing the [Commaai model][commaai-model] use of
+`elu` in their approach. `Elu` is described as being more useful than `Relu` for regression problems like the
 steering prediction problem, where we are not predicting specific classes but rather choosing roughly
 good enough steering angles from continuous range to keep the vehicle on the road. 
 
@@ -137,19 +141,20 @@ important features.
 
 In experimentation we added a `LocallyConnected2D` layer with the intuition that allowing the model 
 to evaluate the parameters in isolation before entering the flatten layer. This did not perform
-much differently, but more than double the number of parameters so we removed it.
+much differently, but more than doubled the number of parameters so we removed it.
 
-We did keep a `MaxPooling2D` layer in the model, as it seemed to perform a bit better.
+We did keep a `MaxPooling2D` layer in the model, as it seemed to perform a bit better in the
+couple trials we observed.
 
- When discussing whether the model performed well or not, we are using the observation of the vehicle
- staying in the middle of the road as our assessment. It is also important to note that there is 
- a significant amount of randomness built into the data generator, so one or two runs of a particular
- model are not enough to make a fair assessment of performance.
+When discussing whether the model performed well or not, we are using the observation of the vehicle
+staying in the middle of the road as our assessment. It is also important to note that there is 
+a significant amount of randomness built into the data generator, so one or two runs of a particular
+model are not enough to make a fair comparison of performance with other network models.
 
 Number Epochs: 40
 Batch Size: 256
 Samples per Epoch: 20,000
-Training Duration: 2565.021s
+Training Duration: 4215.032s
 
         ____________________________________________________________________________________________________
         Layer (type)                     Output Shape          Param #     Connected to                     
@@ -289,15 +294,15 @@ around the track mainly in a counter-clockwise direction.
 In our initial approach to working with the data we wrote a number of algorithms to filter and augment the data,
 and then write it to disk in order to train on pre-processed data with no further augmentation during training.
 
-While that approached turned out to be a bit more manually intensive later once we knew what to look for,
-it did help prove out the basic building blocks of what would later become our realtime data generator. It wsa
+Although that approach began to feel too manually intensive later once we knew what to look for,
+it did help prove out the basic building blocks of what would later become our realtime data generator. It was
 useful to collect the pre-processed data on disk because it help us review and gather metrics on exactly 
 what we planned to train with, plus it meant there would be minimal randomization during training outside
 of the initial shuffling of the data. We believe minimal randomization during training is likely to help
 reduce confounding results when comparing various training networks, but rigorous comparisons were not a 
-concern for this project.
+concern for the goals this project.
 
-We filtered out 90% - 99% of the zero valued angles. We then wanted to balance the left/right steering angles
+We filtered out 95% of the zero valued angles. We then wanted to balance the left/right steering angles
 in the data.  One way to do this would be to drive around the track in the reverse direction, however it was 
 less work to use the existing images and write code to flip them on the vertical axis and multiply the angle
 by -1.0 to. These first two steps at least put our data into a roughly standard bell curve histogram.
@@ -322,7 +327,7 @@ we generated additional data using the Keras `ImageDataGenerator`.
 Our first successful automated drive around the track used the [NVidia Model][nvidia-model] with the 2000
 data samples described above and an additional 8000 realtime generated images. The realtime generation
 involved shifting the images by up to 5% on the vertical or horizontal axes, shifting the color channels,
-and shearing the images.
+and shearing the images, all provided by the Keras ImageDataGenerator.
 
 This exploration informed us of the key components needed to train the vehicle, and is what lead to further
 development on our own realtime data generator, described in the next section.
@@ -331,11 +336,11 @@ development on our own realtime data generator, described in the next section.
 ## Training Process
 
 In our final approach we use the large 160,000 sized sample set as a data pool to select from,
-but we do the real work of data preparation during training.
+and we do all the work of data preparation and augmentation during training.
 
 The following pseudo-code describes how the realtime data generator works:
 
-        big-datset = read angles/image-names from file (each image is a sample)
+        big-datset = read angles/image-names from file (each pair is a sample)
         filtered-data = filter 98% of zero valued angle samples from big-dataset
         bin_edges = divide the range -1.0 - 1.0 into 20 bins with 21 edges
         while loop_forever:
@@ -352,9 +357,10 @@ and cropping the image.
 
 ### Augmentation through Jittering
 
-It turned out to be impractical to use all of the jittering methods described here on the project
-timeline using turn-key implementations provided by python, so we were not able to use all of these
-at the same time, but we can use a few of them during training.
+It turned out to be impractical to use all of the jittering methods we implemented. They are all
+useful for experimentation and we are planning to explore and enhance the `shade` feature as a
+potential way to produce a model that might work on Track-2 without including any Track-2 data
+in the training set.
 
 ---
 We will be working with variations of this original unmodified image sample:
@@ -400,6 +406,55 @@ anywhere in the image.
 
 ![jitter][jitter-shade]
 
+## How To Run Code
+
+Two of the four code files in the project were provided by Udacity as a means of interacting
+with the simulator. We did not modify these (`drive.py`, `video.py`)for our final submission.
+
+### Data Analysis
+
+The `prep.py` program provides the core data generation and augmentation algorithms used by 
+ the model during trainign. By itself, `prep.py` supports two useful capabilities.
+
+First, assuming a directory with `driving_log.csv` and `IMG` paths is available,
+ the `prep.py` file will squash the multi-column `driving_log.csv` output into 
+ a dual column csv file with a pair row for every image and steering angle
+ saved to `pairs_log.csv` next to `driving_log.csv`. It will also generate a
+ and save a histogram png file, and create a `metrics.txt` file describing
+ the basic distribution of the data.
+ 
+ THe following is an example:
+ 
+        python prep.py -d /path/to/driving-folder
+
+### Jittering Demo
+
+The `prep.py` program also supports demoing an example of each of the augmentation
+approaches it has implemented. The jittering demo will accept as input any image
+with the same input dimensions as what the simulator produces, and it will output
+several jittered images into a specified directory.
+
+The following is an example:
+
+        python prep.py -j True --jitter_input sample-image.jpg --jitter_output ./output-path
+
+## Model Training
+
+The `model.py` program is where our model code is. We have three models available to try out
+in the code. The [Commaai Model][commai-model], the [NVidia Model][nvidia-model] and our own
+custom model, which is the default.
+
+Running a model requires a directory to be specified where the simulator saved its data.
+
+        python model.py -d /path/to/simulator-output-folder
+        
+The `moriarty` model is the default model. Trying an alternative model is possible
+by specifying the `-m` option and the model name. For example, the command below
+runs the NVidia model.
+
+        python model.py -d /pathto/simulator-output-folder -m nvidia
+
+---
 [//]: # (Research References)
 
 [nvidia-model]: https://devblogs.nvidia.com/parallelforall/deep-learning-self-driving-cars/
