@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import csv
-import cv2
+import skimage.transform as transform
+import skimage.io as imgio
+from skimage.draw import polygon
 
 from scipy import ndimage
 import random
@@ -131,7 +133,7 @@ class DataFolder:
         for i, name in enumerate(self.names[:max_load]):
             if i % log_every_n == 0:
                 print("Loaded {} of {} total images.".format(i, max_load))
-            images[i][:, :] = cv2.imread('/'.join([self.base_folder, name]))
+            images[i][:, :] = ndimage.imread('/'.join([self.base_folder, name]))
 
         print("Loaded {} images".format(len(images)))
         print("Duration: {}s".format(round(time() - t0, 3)))
@@ -152,7 +154,7 @@ class DataFolder:
         plt.title(title)
         plt.xlabel("Value")
         plt.ylabel("Frequency")
-        plt.savefig("/".join([self.base_folder, "{}.{}".format(title, 'png')]))
+        plt.savefig("/".join([self.base_folder, "{}.{}".format(title, 'png')]), dpi=50)
         plt.clf()
 
         with open('/'.join([self.base_folder, "metrics.txt"]), "a") as metrics_file:
@@ -162,7 +164,11 @@ class DataFolder:
             metrics_file.write("bin_edges: {}\n".format(bin_edges))
 
     def data_generator(self, batch_size=256, loop_forever=True, min_filter=0.001, min_keep_prob=0.1,
-                       max_filter=1.0, max_keep_prob=1.0, bin_count=20, pick_limit=40000):
+                       max_filter=1.0, max_keep_prob=1.0, bin_count=20, pick_limit=40000,
+                       shift_prob=0.8, shift_height_range=0.15, shift_width_range=0.15,
+                       shift_channel_prob=0.3, flip_prob=0.5, blur_prob=0.5, blur_sigma_range=4.0,
+                       shear_prob=0.5, shear_range=0.8, noise_prob=0.5, noise_scale_range=50,
+                       shade_prob=0.8, shade_count=2, shade_points=10, shade_diff_range=150):
         """
         Repeated select random batches of data from the dataset.
         The pool of data can be reduced by filtering large values or values near zero
@@ -191,7 +197,14 @@ class DataFolder:
                                                   pick_limit=pick_limit)
                 angles[i], images[i][:, :] = \
                     DataFolder.jitter_data(interim_angles[pick_i],
-                                           ndimage.imread('/'.join([self.base_folder, interim_names[pick_i]])))
+                                           imgio.imread('/'.join([self.base_folder, interim_names[pick_i]])),
+                                           shift_prob=shift_prob, shift_height_range=shift_height_range,
+                                           shift_width_range=shift_width_range, shift_channel_prob=shift_channel_prob,
+                                           flip_prob=flip_prob, blur_prob=blur_prob, blur_sigma_range=blur_sigma_range,
+                                           shear_prob=shear_prob, shear_range=shear_range, noise_prob=noise_prob,
+                                           noise_scale_range=noise_scale_range, shade_prob=shade_prob,
+                                           shade_count=shade_count, shade_points=shade_points,
+                                           shade_diff_range=shade_diff_range)
             if loop_forever:
                 yield images, angles
             else:
@@ -205,7 +218,7 @@ class DataFolder:
         :param max_filter: angles greater than this are considered to large
         :param min_filter: angles less than this are treated as zero
         :param min_keep_prob: probability of keeping zero valued angles
-        :return:
+        :return: shuffled and filtered names and anlges arrays
         """
         exclude_min = np.any([abs(self.angles) > min_filter,
                               np.random.rand(len(self.angles)) < min_keep_prob], axis=0)
@@ -217,8 +230,10 @@ class DataFolder:
         return interim_names, interim_angles
 
     @staticmethod
-    def jitter_data(angle, image, shift_prob=0.8, shift_height_range=0.05, shift_width_range=0.05,
-                    shift_channel_prob=0.3, flip_prob=0.5):
+    def jitter_data(angle, image, shift_prob=0.8, shift_height_range=0.15, shift_width_range=0.15,
+                    shift_channel_prob=0.3, flip_prob=0.5, blur_prob=0.5, blur_sigma_range=4.0,
+                    shear_prob=0.5, shear_range=0.8, noise_prob=0.5, noise_scale_range=50,
+                    shade_prob=0.8, shade_count=2, shade_points=10, shade_diff_range=150):
         """
         Perform random maniplations on the generated images, controlled by this method's parameters.
         Both the angle and image can be modified as part of the return value.
@@ -229,24 +244,68 @@ class DataFolder:
         :param shift_width_range: range to shift width as proportion of total width
         :param shift_channel_prob: probability of shifting the rgb channels
         :param flip_prob: probability the image and angle will be flipped
+        :param blur_sigma_range: range of sigma value used for guassian blur
+        :param blur_prob: probability of blurring the image
+        :param shear_range: angle range for shearing the image
+        :param shear_prob: probability the image will be sheared
         :return: jittered image and angle
         """
+        # once we have a copy because one of the jitter features activates, we'll call this True
+        # so follow features do not need to recopy it.
+        copied = False
+        input_type = image.dtype
         if random.random() < flip_prob:
             image = np.fliplr(image)
-            # image = cv2.flip(image, 1)
+            copied = True
             angle *= -1
+
+        if random.random() < blur_prob:
+            image = ndimage.gaussian_filter(image, random.uniform(1.0, blur_sigma_range))
+            copied = True
+
+        if random.random() < noise_prob:
+            if not copied:
+                image = np.copy(image)
+                copied = True
+            snp = np.random.random_integers(low=-noise_scale_range, high=noise_scale_range,
+                                            size=np.shape(image)).astype(input_type)
+            image += snp
+
+        if random.random() < shade_prob:
+            if not copied:
+                image = np.copy(image)
+                copied = True
+            add_or_subtract = random.random()
+            for _ in range(shade_count):
+                pct = random.randint(3, shade_points)
+                c = np.random.random_integers(low=0, high=WIDTH-1, size=pct)
+                r = np.random.random_integers(low=0, high=HEIGHT-1, size=pct)
+                rr, cc = polygon(r, c)
+                if add_or_subtract < 0.5:
+                    image[rr, cc] -= random.randint(50, shade_diff_range)
+                else:
+                    image[rr, cc] += random.randint(50, shade_diff_range)
 
         if random.random() < shift_prob:
             h, w, c = image.shape
             h_dist = h * shift_height_range
             w_dist = w * shift_width_range
-            c_dist = random.randint(1, 2) if random.random() < shift_channel_prob else 0
             mode = 'nearest' if random.random() < 0.5 else 'wrap'
             image = ndimage.shift(image,
-                                  (random.uniform(-h_dist, h_dist),
-                                   random.uniform(-w_dist, w_dist),
-                                   random.uniform(-c_dist, c_dist)),
+                                  (random.uniform(-h_dist, h_dist), random.uniform(-w_dist, w_dist), 0),
                                   mode=mode, order=0)
+            copied = True
+
+        if random.random() < shift_channel_prob:
+            c_dist = random.randint(1, 2)
+            image = ndimage.shift(image, (0, 0, random.uniform(-c_dist, c_dist)), order=0)
+            copied = True
+
+        if random.random() < shear_prob:
+            shear = random.uniform(-shear_range, shear_range)
+            translation = (shear / 2.0 * WIDTH, 0)
+            image = transform.warp(image, transform.AffineTransform(shear=shear, translation=translation))
+            copied = True
 
         return angle, image
 
@@ -307,16 +366,68 @@ def initialize_folder(input_folder_name):
     input_folder.store_data_metrics()
     input_folder.persist_pairs()
 
+def show_image(image, title, output_file=None):
+    plt.figure()
+    plt.title(title)
+    plt.imshow(image)
+    if output_file is not None:
+        plt.savefig(output_file, dpi=50)
+        print("saved as: {}".format(output_file))
+    plt.show()
+
+def demo_jitter(input_image_file, output_path):
+    """
+    Generate a sampling of the kinds of jittering we can do.
+    :param input_image_file: file name of image to load
+    :param output_path: path where to write jittered outpu
+    """
+    print("Jitter Demo: input-image={}, output-folder={}".format(input_image_file, output_path))
+    assert path.exists(input_image_file), "Input image file not found"
+    if not path.exists(output_path):
+        os.makedirs(output_path)
+
+    # number of jitter features we support
+    option_count = 7
+    option_names = ['flip', 'shift', 'shift_channel', 'blur', 'shear', 'noise', 'shade']
+
+    for i in range(option_count):
+        probs = np.zeros(option_count)
+        probs[i] = 1.0
+        image = ndimage.imread(input_image_file)
+        _, jittered = \
+            DataFolder.jitter_data(0, image,
+                                   flip_prob=probs[0],
+                                   shift_prob=probs[1],
+                                   shift_channel_prob=probs[2],
+                                   blur_prob=probs[3],
+                                   shear_prob=probs[4],
+                                   noise_prob=probs[5],
+                                   shade_prob=probs[6])
+
+        output_file = "/".join([output_path, "{}.{}".format(option_names[i], 'png')])
+        show_image(jittered, option_names[i], output_file=output_file)
+
 
 def main():
     import optparse
 
     parser = optparse.OptionParser()
-    parser.add_option('-d', '--data_folder', dest='data_folder', default='./data/moriarty-track1-combine',
+    parser.add_option('-d', '--data_folder', dest='data_folder', default=None,
                       help="path to folder containing driving_log.csv and image data.")
+    parser.add_option('-j', '--jitter_demo', dest='jitter_demo', default=True,
+                      help="set to True to demo the jitter capabilities")
+    parser.add_option('--jitter_input', dest='jitter_input', default='sample.jpg',
+                      help="specify the sample image to jitter, requires -jTrue option required")
+    parser.add_option('--jitter_output', dest='jitter_output', default='./jitter-demo',
+                      help="output folder to store demo jitter data, -jTrue option required")
+
     options, args = parser.parse_args()
 
-    initialize_folder(options.data_folder)
+    if options.jitter_demo or options.jitter_demo == 'True':
+        demo_jitter(options.jitter_input, options.jitter_output)
+
+    if options.data_folder is not None:
+        initialize_folder(options.data_folder)
 
 if __name__ == "__main__":
     main()

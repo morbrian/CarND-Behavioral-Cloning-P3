@@ -162,7 +162,14 @@ def build_and_train_model(train_data_path, model_name):
 
     t0 = time()
     model.fit_generator(
-        training_folder.data_generator(min_keep_prob=0.01),
+        training_folder.data_generator(min_keep_prob=0.95,
+                                       flip_prob=0.0,
+                                       shift_prob=0.0,
+                                       shift_channel_prob=0.0,
+                                       blur_prob=0.0,
+                                       shear_prob=0.0,
+                                       noise_prob=0.0,
+                                       shade_prob=0.0),
         samples_per_epoch=20000,
         nb_epoch=40,
         verbose=1)
