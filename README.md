@@ -5,6 +5,14 @@ The third project in the first 3 month session of the Udacity Self Driving Car s
 * [Introduction](#introduction)
 * [Background](#background)
 * [Approach](#approach)
+    * [Early Failed Attempts](#early-failed-attempts)
+    * [Problem Identifeid](#problem-identified)
+    * [Finally Success](#finally-success)
+* [Model](#model)
+* [Data Collection](#data-collection)
+* [Data Preparation](#data-preparation)
+* [Training Process](#training-process)
+* [Augmentation Through Jittering](#augmentation-through-jittering)
 
 ---
 ## Introduction
@@ -108,7 +116,89 @@ With that, we finally had a working model that could drive the vehicle around tr
 ---
 ## Model
 
-TODO 
+We started with the [NVidia Model][nvidia-model], and once we learned how to train it successfully we
+added some layers of our own to experiment. We use a lambda layer to perform initial normalization,
+and then apply cropping to focus more on the road than the horizon.
+
+The [NVidia paper][nvidia-model] did not state what they used for activation. We decided to specify `elu`
+activation as part of each convolution layer, inspired by seeing the [Commaai model][commaai-model] use
+`elu` in their approach. `Elu` is described as being more useful for regression problems like the
+steering prediction problem, where we are not predicting specific classes but rather choosing roughly
+good enough steering angles from continuous range to keep the vehicle on the road. 
+
+It was also not clear to us whether the [NVidia paper's][nvidia-model] description of the model applied 
+only to the usable result or also to the training process. For example we did not see mention of Dropout
+in the paper, but we know those are turned off outside of training. We added Dropout to our model in
+an effort to reduce overfitting to track-1.
+
+Our final model is essentially a deeper version of the [NVidia][nvidia-model]. We added additoinal
+convolution2d layers in the hopes of giving the architecture a better chance at pulling out more
+important features.
+
+In experimentation we added a `LocallyConnected2D` layer with the intuition that allowing the model 
+to evaluate the parameters in isolation before entering the flatten layer. This did not perform
+much differently, but more than double the number of parameters so we removed it.
+
+We did keep a `MaxPooling2D` layer in the model, as it seemed to perform a bit better.
+
+ When discussing whether the model performed well or not, we are using the observation of the vehicle
+ staying in the middle of the road as our assessment. It is also important to note that there is 
+ a significant amount of randomness built into the data generator, so one or two runs of a particular
+ model are not enough to make a fair assessment of performance.
+
+Number Epochs: 40
+Batch Size: 256
+Samples per Epoch: 20,000
+Training Duration: 2565.021s
+
+        ____________________________________________________________________________________________________
+        Layer (type)                     Output Shape          Param #     Connected to                     
+        ====================================================================================================
+        lambda_1 (Lambda)                (None, 160, 320, 3)   0           lambda_input_1[0][0]             
+        ____________________________________________________________________________________________________
+        cropping2d_1 (Cropping2D)        (None, 95, 320, 3)    0           lambda_1[0][0]                   
+        ____________________________________________________________________________________________________
+        convolution2d_1 (Convolution2D)  (None, 88, 313, 12)   2316        cropping2d_1[0][0]               
+        ____________________________________________________________________________________________________
+        convolution2d_2 (Convolution2D)  (None, 42, 155, 24)   7224        convolution2d_1[0][0]            
+        ____________________________________________________________________________________________________
+        convolution2d_3 (Convolution2D)  (None, 19, 76, 36)    21636       convolution2d_2[0][0]            
+        ____________________________________________________________________________________________________
+        dropout_1 (Dropout)              (None, 19, 76, 36)    0           convolution2d_3[0][0]            
+        ____________________________________________________________________________________________________
+        convolution2d_4 (Convolution2D)  (None, 9, 37, 48)     15600       dropout_1[0][0]                  
+        ____________________________________________________________________________________________________
+        dropout_2 (Dropout)              (None, 9, 37, 48)     0           convolution2d_4[0][0]            
+        ____________________________________________________________________________________________________
+        convolution2d_5 (Convolution2D)  (None, 4, 18, 64)     27712       dropout_2[0][0]                  
+        ____________________________________________________________________________________________________
+        maxpooling2d_1 (MaxPooling2D)    (None, 2, 9, 64)      0           convolution2d_5[0][0]            
+        ____________________________________________________________________________________________________
+        dropout_3 (Dropout)              (None, 2, 9, 64)      0           maxpooling2d_1[0][0]             
+        ____________________________________________________________________________________________________
+        flatten_1 (Flatten)              (None, 1152)          0           dropout_3[0][0]                  
+        ____________________________________________________________________________________________________
+        dense_1 (Dense)                  (None, 1164)          1342092     flatten_1[0][0]                  
+        ____________________________________________________________________________________________________
+        dropout_4 (Dropout)              (None, 1164)          0           dense_1[0][0]                    
+        ____________________________________________________________________________________________________
+        dense_2 (Dense)                  (None, 100)           116500      dropout_4[0][0]                  
+        ____________________________________________________________________________________________________
+        dropout_5 (Dropout)              (None, 100)           0           dense_2[0][0]                    
+        ____________________________________________________________________________________________________
+        dense_3 (Dense)                  (None, 50)            5050        dropout_5[0][0]                  
+        ____________________________________________________________________________________________________
+        dropout_6 (Dropout)              (None, 50)            0           dense_3[0][0]                    
+        ____________________________________________________________________________________________________
+        dense_4 (Dense)                  (None, 10)            510         dropout_6[0][0]                  
+        ____________________________________________________________________________________________________
+        dropout_7 (Dropout)              (None, 10)            0           dense_4[0][0]                    
+        ____________________________________________________________________________________________________
+        dense_5 (Dense)                  (None, 1)             11          dropout_7[0][0]                  
+        ====================================================================================================
+        Total params: 1,538,651
+        Trainable params: 1,538,651
+        Non-trainable params: 0
 
 ---
 ## Data Collection
@@ -246,7 +336,7 @@ but we do the real work of data preparation during training.
 The following pseudo-code describes how the realtime data generator works:
 
         big-datset = read angles/image-names from file (each image is a sample)
-        filtered-data = filter 95% of zero valued angle samples from big-dataset
+        filtered-data = filter 98% of zero valued angle samples from big-dataset
         bin_edges = divide the range -1.0 - 1.0 into 20 bins with 21 edges
         while loop_forever:
             for i in range(batch_size):
